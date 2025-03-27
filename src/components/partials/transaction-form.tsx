@@ -27,6 +27,8 @@ import {
   setStep,
   TransactionStep,
 } from "@/lib/features/transaction/transactionSlice";
+import { useAccount } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 const formSchema = z.object({
   networkChain: z.string().min(2).max(50),
@@ -39,6 +41,8 @@ const formSchema = z.object({
 export default function TransactionForm() {
   const dispatch = useAppDispatch();
   const { currentTransaction } = useAppSelector((state) => state.transactions);
+
+  const { isConnected } = useAccount();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -185,14 +189,17 @@ export default function TransactionForm() {
             </FormItem>
           )}
         />
-
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={form.formState.isSubmitting}
-        >
-          Continue to Review
-        </Button>
+        {isConnected ? (
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={form.formState.isSubmitting}
+          >
+            Continue to Review
+          </Button>
+        ) : (
+          <ConnectButton label="Connect Wallet" />
+        )}
       </form>
     </Form>
   );
