@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -29,9 +29,14 @@ import {
 } from "@/lib/features/transaction/transactionSlice";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import {
+  getTokenAddressByName,
+  getTokenDecimalsByName,
+  useBridgePayContract,
+} from "@/lib/features/transaction/contractInteraction";
+import SUPPORTED_TOKENS from "@/lib/constants/supportedTokens";
 
 const formSchema = z.object({
-  networkChain: z.string().min(2).max(50),
   destinationAddress: z.string().min(2).max(50),
   destinationAmount: z.coerce.number().min(0.01),
   destinationTokenName: z.string().min(2).max(50),
@@ -43,19 +48,21 @@ export default function TransactionForm() {
   const { currentTransaction } = useAppSelector((state) => state.transactions);
 
   const { isConnected } = useAccount();
+  const { approveToken } = useBridgePayContract();
+
+  const [approvalPending, setApprovalPending] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: currentTransaction
       ? {
-          networkChain: currentTransaction.networkChain,
           destinationAddress: currentTransaction.destinationAddress,
           destinationAmount: currentTransaction.destinationAmount,
           destinationTokenName: currentTransaction.destinationTokenName,
           originTokenName: currentTransaction.originTokenName,
         }
       : {
-          networkChain: "",
           destinationAddress: "",
           destinationAmount: 0,
           destinationTokenName: "",
@@ -63,9 +70,24 @@ export default function TransactionForm() {
         },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    // Save form data to Redux
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     dispatch(setTransactionData(values));
+
+    setIsLoading(true);
+
+    setApprovalPending(true);
+    const sourceTokenAddress = getTokenAddressByName(values.originTokenName);
+    const sourceTokenDecimals = getTokenDecimalsByName(values.originTokenName);
+
+    await approveToken(
+      sourceTokenAddress,
+      values.destinationAmount.toString(),
+      sourceTokenDecimals
+    );
+
+    setApprovalPending(false);
+
+    setIsLoading(false);
 
     // Move to review step
     dispatch(setStep(TransactionStep.REVIEW));
@@ -74,32 +96,6 @@ export default function TransactionForm() {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <FormField
-          control={form.control}
-          name="networkChain"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Network Chain</FormLabel>
-              <FormControl>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select network chain" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BNB">BNB</SelectItem>
-                    <SelectItem value="Arbitrum">Arbitrum</SelectItem>
-                    <SelectItem value="Manta">Manta</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
         <FormField
           control={form.control}
           name="destinationAddress"
@@ -132,10 +128,11 @@ export default function TransactionForm() {
                     <SelectValue placeholder="Select destination token" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ETH">ETH</SelectItem>
-                    <SelectItem value="USDT">USDT</SelectItem>
-                    <SelectItem value="IDRX">IDRX</SelectItem>
-                    <SelectItem value="wBTC">wBTC</SelectItem>
+                    {Object.keys(SUPPORTED_TOKENS).map((token) => (
+                      <SelectItem key={token} value={token}>
+                        {token}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </FormControl>
@@ -178,10 +175,11 @@ export default function TransactionForm() {
                     <SelectValue placeholder="Select origin token" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ETH">ETH</SelectItem>
-                    <SelectItem value="USDT">USDT</SelectItem>
-                    <SelectItem value="IDRX">IDRX</SelectItem>
-                    <SelectItem value="wBTC">wBTC</SelectItem>
+                    {Object.keys(SUPPORTED_TOKENS).map((token) => (
+                      <SelectItem key={token} value={token}>
+                        {token}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </FormControl>
@@ -189,7 +187,13 @@ export default function TransactionForm() {
             </FormItem>
           )}
         />
-        {isConnected ? (
+        {!isConnected ? (
+          <ConnectButton label="Connect Wallet" />
+        ) : isLoading ? (
+          <Button className="w-full" disabled>
+            {approvalPending ? "Approving Token..." : "Processing..."}
+          </Button>
+        ) : (
           <Button
             type="submit"
             className="w-full"
@@ -197,8 +201,6 @@ export default function TransactionForm() {
           >
             Continue to Review
           </Button>
-        ) : (
-          <ConnectButton label="Connect Wallet" />
         )}
       </form>
     </Form>

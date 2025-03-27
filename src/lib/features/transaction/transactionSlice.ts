@@ -8,7 +8,6 @@ export enum TransactionStep {
 
 export interface Transaction {
   id: string;
-  networkChain: string;
   destinationAddress: string;
   destinationAmount: number;
   destinationTokenName: string;
