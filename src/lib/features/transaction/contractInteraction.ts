@@ -50,7 +50,7 @@ export function useBridgePayContract() {
       return await writeContractAsync({
         address: BRIDGE_PAY_ADDRESS,
         abi: BRIDGE_PAY_ABI,
-        functionName: "bridgeTransfer",
+        functionName: "depositAndSwapToDestination",
         args: [
           recipient,
           sourceToken,
